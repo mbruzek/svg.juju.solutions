@@ -25,8 +25,9 @@ def parse_bundle_id(bundle_id):
         return None
 
     bundle_path = m.group(0).replace('cs:', '')
-    return ('https://api.jujucharms.com/v4/%s/archive/bundle.yaml' % bundle_path,
-            'https://api.jujucharms.com/v4/%s/diagram.svg' % bundle_path)
+    url = 'https://api.jujucharms.com/v4/%s/archive/bundle.yaml' % bundle_path
+    diagram_url = 'https://api.jujucharms.com/v4/%s/diagram.svg' % bundle_path
+    return (url, diagram_url)
 
 
 def split_rel(r):
@@ -44,7 +45,9 @@ def mapply(func, g, **kwargs):
 # https://gist.github.com/bcsaller/adca309ba7abef2e8caf#file-place_bundle-py-L46
 def layout(bundle, algo, scale=500.0):
     g = nx.MultiGraph()
-    for service in bundle['services']:
+    # In Juju 2.0 'services' was replaced by 'applications'.
+    services = bundle.get('services') or bundle.get('applications')
+    for service in services:
         g.add_node(service)
 
     for relation in bundle['relations']:
@@ -57,7 +60,7 @@ def layout(bundle, algo, scale=500.0):
             g.add_edge(src, tgt)
     pos = mapply(algo, g, k=45, iterations=100)
 
-    for service, data in list(bundle['services'].items()):
+    for service, data in list(services.items()):
         data['annotations'] = {
             "gui-x": float(pos[service][0]) * scale,
             "gui-y": float(pos[service][1]) * scale,
@@ -66,24 +69,28 @@ def layout(bundle, algo, scale=500.0):
 
 
 def process_bundle(bundle):
-    if len(bundle) > 1 and 'services' not in bundle:
-        raise BundleFormatException('This has multiple deployments')
+    # In Juju 2.0 'services' is replaced by 'applications'
+    no_services = 'services' not in bundle and 'applications' not in bundle
+    if len(bundle) > 1 and no_services:
+        raise BundleFormatException('This bundle has multiple deployments.')
 
-    if 'services' not in bundle:
-        if 'services' not in next(iter(bundle.values())):
-            raise BundleFormatException("This probably isn't a bundle...")
-
+    if no_services:
         bundle = next(iter(bundle.values()))
+        no_services = 'services' not in bundle and 'applications' not in bundle
+        if no_services:
+            raise BundleFormatException('This bundle has no applications.')
 
     annotations = False
-    for service, srvc_data in bundle['services'].items():
+    # In Juju 2.0 'services' was replaced by 'applications'.
+    services = bundle.get('services') or bundle.get('applications')
+    for service, srvc_data in services.items():
         if 'annotations' in list(srvc_data.keys()):
             annotations = True
             break
 
     if not annotations:
-        #layout = 'circular'
-        #algo = getattr(nx, layout + '_layout', None)
+        # layout = 'circular'
+        # algo = getattr(nx, layout + '_layout', None)
         layout(bundle, nx.circular_layout)
 
     with tempfile.NamedTemporaryFile() as f:
