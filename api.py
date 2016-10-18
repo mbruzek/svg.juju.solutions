@@ -25,8 +25,8 @@ def parse_bundle_id(bundle_id):
         return None
 
     bundle_path = m.group(0).replace('cs:', '')
-    url = 'https://api.jujucharms.com/v4/%s/archive/bundle.yaml' % bundle_path
-    diagram_url = 'https://api.jujucharms.com/v4/%s/diagram.svg' % bundle_path
+    url = 'https://api.jujucharms.com/v5/%s/archive/bundle.yaml' % bundle_path
+    diagram_url = 'https://api.jujucharms.com/v5/%s/diagram.svg' % bundle_path
     return (url, diagram_url)
 
 
@@ -46,9 +46,9 @@ def mapply(func, g, **kwargs):
 def layout(bundle, algo, scale=500.0):
     g = nx.MultiGraph()
     # In Juju 2.0 'services' was replaced by 'applications'.
-    services = bundle.get('services') or bundle.get('applications')
-    for service in services:
-        g.add_node(service)
+    applications = bundle.get('services') or bundle.get('applications')
+    for application in applications:
+        g.add_node(application)
 
     for relation in bundle['relations']:
         src = split_rel(relation[0])[0]
@@ -60,31 +60,25 @@ def layout(bundle, algo, scale=500.0):
             g.add_edge(src, tgt)
     pos = mapply(algo, g, k=45, iterations=100)
 
-    for service, data in list(services.items()):
+    for application, data in list(applications.items()):
         data['annotations'] = {
-            "gui-x": float(pos[service][0]) * scale,
-            "gui-y": float(pos[service][1]) * scale,
+            "gui-x": float(pos[application][0]) * scale,
+            "gui-y": float(pos[application][1]) * scale,
         }
     return g
 
 
 def process_bundle(bundle):
     # In Juju 2.0 'services' is replaced by 'applications'
-    no_services = 'services' not in bundle and 'applications' not in bundle
-    if len(bundle) > 1 and no_services:
+    no_applications = 'services' not in bundle and 'applications' not in bundle
+    if no_applications:
         raise BundleFormatException('This bundle has multiple deployments.')
-
-    if no_services:
-        bundle = next(iter(bundle.values()))
-        no_services = 'services' not in bundle and 'applications' not in bundle
-        if no_services:
-            raise BundleFormatException('This bundle has no applications.')
 
     annotations = False
     # In Juju 2.0 'services' was replaced by 'applications'.
-    services = bundle.get('services') or bundle.get('applications')
-    for service, srvc_data in services.items():
-        if 'annotations' in list(srvc_data.keys()):
+    applications = bundle.get('services') or bundle.get('applications')
+    for application, data in applications.items():
+        if 'annotations' in list(data.keys()):
             annotations = True
             break
 
